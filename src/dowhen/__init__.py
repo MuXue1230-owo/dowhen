@@ -8,5 +8,6 @@ from .callback import bp, do, goto
 from .instrumenter import DISABLE
 from .trigger import when
 from .util import clear_all, get_source_hash
+from .builder import instrument, InstrumentBuilder
 
-__all__ = ["bp", "clear_all", "do", "get_source_hash", "goto", "when", "DISABLE"]
+__all__ = ["bp", "clear_all", "do", "get_source_hash", "goto", "when", "DISABLE", "instrument", "InstrumentBuilder"]

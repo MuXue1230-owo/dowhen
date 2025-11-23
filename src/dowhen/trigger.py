@@ -44,6 +44,16 @@ class Trigger:
         self.condition = condition
         self.is_global = is_global
 
+        self.condition = condition
+        self.compiled_condition = None
+        if isinstance(condition, str):
+            try:
+                self.compiled_condition = compile(condition, "<string>", "eval")
+            except SyntaxError:
+                raise ValueError(f"Invalid condition expression: {condition}")
+        elif condition is not None and not callable(condition):
+            raise TypeError(f"Condition must be a string or callable, got {type(condition)}")
+
     @classmethod
     def _get_code_from_entity(
         cls, entity: CodeType | FunctionType | MethodType | ModuleType | type | None
@@ -225,8 +235,8 @@ class Trigger:
         if self.condition is None:
             return True
         try:
-            if isinstance(self.condition, str):
-                return eval(self.condition, frame.f_globals, frame.f_locals)
+            if self.compiled_condition is not None:
+                return eval(self.compiled_condition, frame.f_globals, frame.f_locals)
             elif callable(self.condition):
                 return call_in_frame(self.condition, frame)
         except Exception:

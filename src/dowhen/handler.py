@@ -50,8 +50,10 @@ class EventHandler:
                 self.disable()
             elif should_fire:
                 for cb in self.callbacks:
-                    if cb(frame, **kwargs) is DISABLE:
+                    result = cb(frame, **kwargs)
+                    if result is DISABLE:
                         self.disable()
+                        break
 
         if self.disabled:
             return DISABLE

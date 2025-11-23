@@ -30,7 +30,6 @@ def getrealsourcelines(obj) -> tuple[list[str], int]:
     return lines, start_line
 
 
-@functools.lru_cache(maxsize=256)
 def get_all_code_objects(code: CodeType) -> list[CodeType]:
     """
     Recursively get all code objects from the given code object.
@@ -49,7 +48,6 @@ def get_all_code_objects(code: CodeType) -> list[CodeType]:
     return all_code_objects
 
 
-@functools.lru_cache(maxsize=256)
 def get_line_numbers(
     code: CodeType, identifier: IdentifierType | tuple[IdentifierType, ...]
 ) -> dict[CodeType, list[int]]:
@@ -82,10 +80,19 @@ def get_line_numbers(
         line_numbers_sets.append(line_numbers_set)
 
     agreed_line_numbers = set.intersection(*line_numbers_sets)
+    
+    line_to_code = {}
     for sub_code in get_all_code_objects(code):
-        for line_number in agreed_line_numbers:
-            if line_number in (line[2] for line in sub_code.co_lines()):
-                line_numbers_ret.setdefault(sub_code, []).append(line_number)
+        for start, end, line_no in sub_code.co_lines():
+            if line_no is not None:
+                existing = line_to_code.get(line_no)
+                if existing is None or len(inspect.getsource(existing).splitlines()) < len(inspect.getsource(sub_code).splitlines()):
+                    line_to_code[line_no] = sub_code
+    
+    for line_number in agreed_line_numbers:
+        if line_number in line_to_code:
+            sub_code = line_to_code[line_number]
+            line_numbers_ret.setdefault(sub_code, []).append(line_number)
 
     for line_numbers in line_numbers_ret.values():
         line_numbers.sort()
@@ -93,7 +100,6 @@ def get_line_numbers(
     return line_numbers_ret
 
 
-@functools.lru_cache(maxsize=256)
 def get_func_args(func: Callable) -> list[str]:
     args = inspect.getfullargspec(inspect.unwrap(func)).args
     # For bound methods, skip the first argument since it's already bound
@@ -101,6 +107,72 @@ def get_func_args(func: Callable) -> list[str]:
         return args[1:]
     else:
         return args
+
+
+class AdaptiveCache:
+    def __init__(self, initial_size=256, growth_factor=1.2, shrink_factor=0.8, 
+                 hit_ratio_threshold=0.7, check_interval=100):
+        self.cache = {}
+        self.maxsize = initial_size
+        self.hits = 0
+        self.misses = 0
+        self.access_count = 0
+        self.growth_factor = growth_factor
+        self.shrink_factor = shrink_factor
+        self.hit_ratio_threshold = hit_ratio_threshold
+        self.check_interval = check_interval
+        
+    def __call__(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            
+            self.access_count += 1
+            if self.access_count >= self.check_interval:
+                self._adjust_cache_size()
+                self.access_count = 0
+            
+            if key in self.cache:
+                self.hits += 1
+                return self.cache[key]
+            
+            self.misses += 1
+            
+            result = func(*args, **kwargs)
+            
+            if len(self.cache) >= self.maxsize:
+                self._cleanup_cache()
+            
+            self.cache[key] = result
+            return result
+            
+        return wrapper
+    
+    def _adjust_cache_size(self):
+        if self.hits + self.misses == 0:
+            return
+            
+        hit_ratio = self.hits / (self.hits + self.misses)
+        
+        if hit_ratio > self.hit_ratio_threshold and self.maxsize < 10000:
+            new_size = int(self.maxsize * self.growth_factor)
+            self.maxsize = min(new_size, 10000)
+        elif hit_ratio < self.hit_ratio_threshold * 0.5 and self.maxsize > 64:
+            new_size = int(self.maxsize * self.shrink_factor)
+            self.maxsize = max(new_size, 64)
+        
+        self.hits = 0
+        self.misses = 0
+    
+    def _cleanup_cache(self):
+        to_remove = max(1, int(len(self.cache) * 0.1))
+        keys = list(self.cache.keys())[:to_remove]
+        for key in keys:
+            del self.cache[key]
+
+get_all_code_objects = AdaptiveCache(initial_size=128)(get_all_code_objects)
+get_line_numbers = AdaptiveCache(initial_size=256)(get_line_numbers)
+get_func_args = AdaptiveCache(initial_size=64)(get_func_args)
 
 
 def call_in_frame(func: Callable, frame: FrameType, **kwargs) -> Any:
