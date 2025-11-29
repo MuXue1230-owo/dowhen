@@ -57,12 +57,23 @@ def get_line_numbers(
     line_numbers_ret: dict[CodeType, list[int]] = {}
     line_numbers_sets = []
 
-    lines, start_line = getrealsourcelines(code)
+    try:
+        lines, start_line = getrealsourcelines(code)
+        has_source = True
+    except OSError:
+        # Handle compiled code objects without source
+        lines = []
+        start_line = 0
+        has_source = False
 
     for ident in identifier:
         if isinstance(ident, int):
             line_numbers_set = {ident}
         else:
+            if not has_source:
+                # Cannot search by string/regex for compiled code
+                return {}
+            
             if isinstance(ident, str) or isinstance(ident, re.Pattern):
                 line_numbers_set = set()
                 for i, line in enumerate(lines):
@@ -86,8 +97,16 @@ def get_line_numbers(
         for start, end, line_no in sub_code.co_lines():
             if line_no is not None:
                 existing = line_to_code.get(line_no)
-                if existing is None or len(inspect.getsource(existing).splitlines()) < len(inspect.getsource(sub_code).splitlines()):
+                if existing is None:
                     line_to_code[line_no] = sub_code
+                elif has_source:
+                    try:
+                        # Only compare source lengths if source is available
+                        if len(inspect.getsource(existing).splitlines()) < len(inspect.getsource(sub_code).splitlines()):
+                            line_to_code[line_no] = sub_code
+                    except OSError:
+                        # If source is not available for either, just keep the first one
+                        pass
     
     for line_number in agreed_line_numbers:
         if line_number in line_to_code:
@@ -112,7 +131,8 @@ def get_func_args(func: Callable) -> list[str]:
 class AdaptiveCache:
     def __init__(self, initial_size=256, growth_factor=1.2, shrink_factor=0.8, 
                  hit_ratio_threshold=0.7, check_interval=100):
-        self.cache = {}
+        from collections import OrderedDict
+        self.cache = OrderedDict()  # Use OrderedDict for LRU behavior
         self.maxsize = initial_size
         self.hits = 0
         self.misses = 0
@@ -134,6 +154,8 @@ class AdaptiveCache:
             
             if key in self.cache:
                 self.hits += 1
+                # Move the accessed item to the end to mark it as recently used
+                self.cache.move_to_end(key)
                 return self.cache[key]
             
             self.misses += 1
@@ -143,9 +165,20 @@ class AdaptiveCache:
             if len(self.cache) >= self.maxsize:
                 self._cleanup_cache()
             
+            # Add the new item to the end
             self.cache[key] = result
             return result
-            
+        
+        # Add cache_clear method to the wrapper function
+        def cache_clear():
+            self.cache.clear()
+            self.hits = 0
+            self.misses = 0
+            self.access_count = 0
+        
+        wrapper.cache_clear = cache_clear
+        wrapper._cache_instance = self  # Store a reference to the cache instance for debugging
+        
         return wrapper
     
     def _adjust_cache_size(self):
@@ -160,15 +193,19 @@ class AdaptiveCache:
         elif hit_ratio < self.hit_ratio_threshold * 0.5 and self.maxsize > 64:
             new_size = int(self.maxsize * self.shrink_factor)
             self.maxsize = max(new_size, 64)
+            # If we're shrinking the cache, clean up immediately
+            while len(self.cache) > self.maxsize:
+                self.cache.popitem(last=False)  # Remove the least recently used item
         
         self.hits = 0
         self.misses = 0
     
     def _cleanup_cache(self):
         to_remove = max(1, int(len(self.cache) * 0.1))
-        keys = list(self.cache.keys())[:to_remove]
-        for key in keys:
-            del self.cache[key]
+        # Remove the least recently used items
+        for _ in range(to_remove):
+            if self.cache:
+                self.cache.popitem(last=False)
 
 get_all_code_objects = AdaptiveCache(initial_size=128)(get_all_code_objects)
 get_line_numbers = AdaptiveCache(initial_size=256)(get_line_numbers)
@@ -195,9 +232,13 @@ def call_in_frame(func: Callable, frame: FrameType, **kwargs) -> Any:
 
 def get_source_hash(entity: CodeType | FunctionType | MethodType | ModuleType | type):
     import hashlib
-
-    source = inspect.getsource(entity)
-    return hashlib.md5(source.encode("utf-8")).hexdigest()[-8:]
+    
+    try:
+        source = inspect.getsource(entity)
+        return hashlib.md5(source.encode("utf-8")).hexdigest()[-8:]
+    except OSError:
+        # Handle cases where source code is not available (e.g., compiled code)
+        return f"compiled_{id(entity):x}"
 
 
 def clear_all() -> None:

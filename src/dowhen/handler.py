@@ -11,6 +11,7 @@ from typing import Any, Callable
 from .callback import Callback
 from .instrumenter import Instrumenter
 from .trigger import Trigger
+from .profiler import PerformanceProfiler
 
 DISABLE = sys.monitoring.DISABLE
 
@@ -35,6 +36,7 @@ class EventHandler:
             Instrumenter().restart_events()
 
     def submit(self) -> None:
+        PerformanceProfiler().register_handler(self)
         Instrumenter().submit(self)
 
     def remove(self) -> None:
@@ -50,10 +52,8 @@ class EventHandler:
                 self.disable()
             elif should_fire:
                 for cb in self.callbacks:
-                    result = cb(frame, **kwargs)
-                    if result is DISABLE:
+                    if cb(frame, **kwargs) is DISABLE:
                         self.disable()
-                        break
 
         if self.disabled:
             return DISABLE

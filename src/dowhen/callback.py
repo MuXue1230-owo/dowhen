@@ -21,6 +21,13 @@ if TYPE_CHECKING:  # pragma: no cover
 
 DISABLE = sys.monitoring.DISABLE
 
+# Check Python version and get PyFrame_LocalsToFast once at module level
+if sys.version_info < (3, 13):
+    LocalsToFast = ctypes.pythonapi.PyFrame_LocalsToFast
+    LocalsToFast.argtypes = [ctypes.py_object, ctypes.c_int]
+else:
+    LocalsToFast = None
+
 
 class Callback:
     def __init__(self, func: str | Callable, **kwargs):
@@ -47,9 +54,7 @@ class Callback:
         else:  # pragma: no cover
             assert False, "Unknown callback type"
 
-        if sys.version_info < (3, 13):
-            LocalsToFast = ctypes.pythonapi.PyFrame_LocalsToFast
-            LocalsToFast.argtypes = [ctypes.py_object, ctypes.c_int]
+        if LocalsToFast is not None:
             LocalsToFast(frame, 0)
 
         if ret is DISABLE:

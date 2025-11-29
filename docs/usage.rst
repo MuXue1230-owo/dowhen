@@ -320,7 +320,7 @@ chain multiple callbacks together:
    assert f(0) == 1
 
 Utilities
----------
+--------
 
 clear_all
 ~~~~~~~~~
@@ -332,3 +332,291 @@ You can clear all handlers set by ``dowhen`` using ``clear_all``.
    from dowhen import clear_all
 
    clear_all()
+
+InstrumentBuilder
+----------------
+
+``InstrumentBuilder`` provides a fluent interface for building complex instrumentation scenarios. It allows you to chain multiple actions and apply them as a single handler.
+
+Creating an InstrumentBuilder
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can create an ``InstrumentBuilder`` instance in two ways:
+
+1. Using the ``instrument()`` factory function:
+
+   .. code-block:: python
+
+      from dowhen import instrument
+
+      builder = instrument()
+
+2. Using the ``InstrumentBuilder`` class directly:
+
+   .. code-block:: python
+
+      from dowhen import InstrumentBuilder
+
+      builder = InstrumentBuilder()
+
+Building Instrumentation
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``InstrumentBuilder`` provides a fluent interface to build instrumentation step by step.
+
+at
+^^
+
+The ``at()`` method specifies the trigger location. It takes the same arguments as ``when()``:
+
+.. code-block:: python
+
+   from dowhen import instrument
+
+   def f(x):
+       return x
+
+   builder = instrument().at(f, "return x")
+
+Actions
+^^^^^^^
+
+You can chain actions to the builder. These actions correspond to the callback functions:
+
+* ``do()`` - Execute arbitrary code
+* ``bp()`` - Set a breakpoint
+* ``goto()`` - Change execution flow
+
+.. code-block:: python
+
+   builder = instrument().at(f, "return x").do("x = 1")
+   builder = instrument().at(f, "return x").bp()
+   builder = instrument().at(f, "x = 1").goto("return x")
+
+You can also chain multiple actions together:
+
+.. code-block:: python
+
+   builder = instrument().at(f, "x += 100").do("x += 1").goto("return x")
+
+Applying the Instrumentation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Once you've built the instrumentation, you can apply it using the ``apply()`` method, which returns a handler:
+
+.. code-block:: python
+
+   handler = instrument().at(f, "return x").do("x = 1").apply()
+   assert f(0) == 1
+
+   # You can disable, enable, or remove the handler as usual
+   handler.remove()
+
+Using with Context Manager
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``InstrumentBuilder`` can be used with a context manager, which automatically applies the instrumentation and removes it when exiting the context:
+
+.. code-block:: python
+
+   with instrument().at(f, "return x").do("x = 1"):
+       assert f(0) == 1
+   assert f(0) == 0
+
+Performance Profiling
+--------------------
+
+``dowhen`` provides built-in performance profiling capabilities through the ``PerformanceProfiler`` class and related functions.
+
+Overview
+~~~~~~~~
+
+The performance profiling feature allows you to:
+
+* Measure the performance of functions with and without instrumentation
+* Compare baseline performance with instrumented performance
+* Generate detailed performance reports
+* Export performance data to JSON
+
+Quick Start
+~~~~~~~~~~~
+
+You can use the ``profile_instrumentation`` context manager to quickly profile a function:
+
+.. code-block:: python
+
+   from dowhen import profile_instrumentation, get_performance_stats
+
+   def f(x):
+       return x
+
+   with profile_instrumentation(f, iterations=100):
+       f(0)
+
+   report = get_performance_stats(f)
+   print(report.summary())
+
+Creating a PerformanceProfiler
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can create a ``PerformanceProfiler`` instance directly:
+
+.. code-block:: python
+
+   from dowhen import PerformanceProfiler
+
+   profiler = PerformanceProfiler()
+
+Profiling Functions
+~~~~~~~~~~~~~~~~~~~
+
+To profile a function, you can use the ``profile_instrumentation`` context manager or the profiler's methods directly:
+
+Using the context manager:
+
+.. code-block:: python
+
+   with profile_instrumentation(f, iterations=100):
+       f(0)
+
+Using the profiler methods directly:
+
+.. code-block:: python
+
+   profiler.start_profiling()
+   # Your code here
+   profiler.stop_profiling()
+
+Getting Performance Statistics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After profiling, you can get the performance statistics using ``get_performance_stats()``:
+
+.. code-block:: python
+
+   from dowhen import get_performance_stats
+
+   report = get_performance_stats(f)
+
+Performance Report
+~~~~~~~~~~~~~~~~~~
+
+The performance report provides summary and detailed information about the profiled functions.
+
+summary()
+^^^^^^^^^
+
+The ``summary()`` method returns a summary of the performance data:
+
+.. code-block:: python
+
+   print(report.summary())
+
+This will print a summary of the performance data, including the function name, baseline time, instrumented time, and overhead.
+
+detailed()
+^^^^^^^^^^
+
+The ``detailed()`` method returns detailed performance data:
+
+.. code-block:: python
+
+   print(report.detailed())
+
+This will print detailed performance data, including the function name, iterations, baseline time, instrumented time, overhead, and additional statistics.
+
+to_dict()
+^^^^^^^^^
+
+The ``to_dict()`` method converts the performance report to a dictionary:
+
+.. code-block:: python
+
+   report_dict = report.to_dict()
+
+This can be useful for further processing or serialization.
+
+to_json()
+^^^^^^^^^
+
+The ``to_json()`` method converts the performance report to a JSON string:
+
+.. code-block:: python
+
+   report_json = report.to_json()
+
+This is useful for exporting performance data to JSON format.
+
+Configuring Default Iterations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can configure the default number of iterations for profiling:
+
+.. code-block:: python
+
+   from dowhen import PerformanceProfiler
+
+   profiler = PerformanceProfiler()
+   profiler.set_default_iterations(1000)
+
+   # Get the current default iterations
+   default_iterations = profiler.get_default_iterations()
+
+Logging
+~~~~~~~
+
+The ``PerformanceProfiler`` uses Python's logging module to log information about the profiling process. You can configure the logging level to control the amount of information logged:
+
+.. code-block:: python
+
+   import logging
+
+   logging.basicConfig(level=logging.DEBUG)
+   # This will enable debug logging for the profiler
+
+Profiling Multiple Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can profile multiple functions with the same profiler:
+
+.. code-block:: python
+
+   def f(x):
+       return x
+
+   def g(x):
+       return x * 2
+
+   with profile_instrumentation(f, iterations=100):
+       f(0)
+
+   with profile_instrumentation(g, iterations=100):
+       g(0)
+
+   report_f = get_performance_stats(f)
+   report_g = get_performance_stats(g)
+
+   print(report_f.summary())
+   print(report_g.summary())
+
+Profiler Handlers
+~~~~~~~~~~~~~~~~~
+
+The profiler automatically registers handlers for the profiled functions. You can register additional handlers if needed:
+
+.. code-block:: python
+
+   profiler = PerformanceProfiler()
+   profiler.register_handler(handler)
+
+Clearing Statistics
+~~~~~~~~~~~~~~~~~~~
+
+You can clear the performance statistics using the ``clear_stats()`` method:
+
+.. code-block:: python
+
+   from dowhen import clear_performance_stats
+
+   clear_performance_stats(f)  # Clear stats for a specific function
+   clear_performance_stats()   # Clear all stats

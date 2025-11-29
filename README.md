@@ -16,6 +16,7 @@ third-party libraries or stdlib in order to
 * debug your program
 * change the original behavior of the libraries
 * monitor your application
+* profile performance
 
 ## Installation
 
@@ -93,7 +94,43 @@ when(f, "x += 100").goto("return x").do("x = 42")
 assert f(0) == 42
 ```
 
-See detailed documentation at https://dowhen.readthedocs.io/
+### Instrumentation Builder
+
+`InstrumentBuilder` provides a fluent interface for building complex instrumentation scenarios.
+
+```python
+from dowhen import instrument
+
+# Using instrument() as a factory function
+handler = instrument().at(f, "return x").do("x = 1")
+assert f(0) == 1
+
+# Using InstrumentBuilder class directly
+from dowhen import InstrumentBuilder
+builder = InstrumentBuilder()
+handler = builder.at(f, "return x").do("x = 1").apply()
+assert f(0) == 1
+
+# Chaining multiple actions
+handler = instrument().at(f, "x += 100").do("x += 1").goto("return x").apply()
+```
+
+### Performance Profiling
+
+`dowhen` provides built-in performance profiling capabilities.
+
+```python
+from dowhen import profile_instrumentation, get_performance_stats
+
+# Profile a function with the profile_instrumentation context manager
+with profile_instrumentation(f, iterations=100):
+    f(0)
+
+# Get performance statistics
+report = get_performance_stats(f)
+print(report.summary())  # Print summary report
+print(report.detailed())  # Print detailed report
+```
 
 ## License
 

@@ -11,7 +11,6 @@ coverage
 # Test
 pytest
 pytest-cov
-coredumpy
 
 # Documentation requirements
 sphinx>=8.0
